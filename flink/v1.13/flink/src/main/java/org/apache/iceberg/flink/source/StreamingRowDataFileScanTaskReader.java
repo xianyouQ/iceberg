@@ -196,7 +196,7 @@ public class StreamingRowDataFileScanTaskReader implements FileScanTaskReader<Ro
         Avro.ReadBuilder builder = Avro.read(inputFile)
                 .reuseContainers()
                 .project(schema)
-                .split(task.start(), task.length())
+                //.split(task.start(), task.length())
                 .createReaderFunc(readSchema -> new FlinkAvroReader(schema, readSchema, idToConstant));
 
         if (nameMapping != null) {
@@ -240,7 +240,7 @@ public class StreamingRowDataFileScanTaskReader implements FileScanTaskReader<Ro
       for (InputFile inputFile: inputFiles) {
         Parquet.ReadBuilder builder = Parquet.read(inputFile)
                 .reuseContainers()
-                .split(task.start(), task.length())
+                //.split(task.start(), task.length())
                 .project(schema)
                 .createReaderFunc(fileSchema -> FlinkParquetReaders.buildReader(schema, fileSchema, idToConstant))
                 .filter(task.residual())
@@ -295,7 +295,7 @@ public class StreamingRowDataFileScanTaskReader implements FileScanTaskReader<Ro
       for (InputFile inputFile: inputFiles) {
         ORC.ReadBuilder builder = ORC.read(inputFile)
                 .project(readSchemaWithoutConstantAndMetadataFields)
-                .split(task.start(), task.length())
+                //.split(task.start(), task.length())
                 .createReaderFunc(readOrcSchema -> new FlinkOrcReader(schema, readOrcSchema, idToConstant))
                 .filter(task.residual())
                 .caseSensitive(caseSensitive);

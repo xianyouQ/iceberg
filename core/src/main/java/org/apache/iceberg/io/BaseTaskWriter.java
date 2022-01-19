@@ -52,6 +52,7 @@ public abstract class BaseTaskWriter<T> implements TaskWriter<T> {
   private final OutputFileFactory fileFactory;
   private final FileIO io;
   private final long targetFileSize;
+  private boolean notDeleteEmptyDataFile = false;
 
   protected BaseTaskWriter(PartitionSpec spec, FileFormat format, FileAppenderFactory<T> appenderFactory,
                            OutputFileFactory fileFactory, FileIO io, long targetFileSize) {
@@ -132,29 +133,21 @@ public abstract class BaseTaskWriter<T> implements TaskWriter<T> {
     }
 
     /**
-     * Write the pos-delete if there's an existing row matching the given key.
-     *
-     * @param key has the same columns with the equality fields.
-     */
-    private void internalPosDelete(StructLike key) {
-      PathOffset previous = insertedRowMap.remove(key);
-
-      if (previous != null) {
-        // TODO attach the previous row if has a positional-delete row schema in appender factory.
-        posDeleteWriter.delete(previous.path, previous.rowOffset, null);
-      }
-    }
-
-    /**
      * Delete those rows whose equality fields has the same values with the given row. It will write the entire row into
      * the equality-delete file.
      *
      * @param row the given row to delete.
      */
     public void delete(T row) throws IOException {
-      internalPosDelete(structProjection.wrap(asStructLike(row)));
-
-      eqDeleteWriter.write(row);
+      StructProjection key = structProjection.wrap(asStructLike(row));
+      PathOffset previous = insertedRowMap.remove(key);
+      if (previous != null) {
+        // TODO attach the previous row if has a positional-delete row schema in appender factory.
+        posDeleteWriter.delete(previous.path, previous.rowOffset, null);
+      } else {
+        notDeleteEmptyDataFile = true;
+        eqDeleteWriter.write(row);
+      }
     }
 
     /**
@@ -164,9 +157,14 @@ public abstract class BaseTaskWriter<T> implements TaskWriter<T> {
      * @param key is the projected data whose columns are the same as the equality fields.
      */
     public void deleteKey(T key) throws IOException {
-      internalPosDelete(asStructLike(key));
-
-      eqDeleteWriter.write(key);
+      StructLike structLikeKey = asStructLike(key);
+      PathOffset previous = insertedRowMap.remove(structLikeKey);
+      if (previous != null){
+        posDeleteWriter.delete(previous.path, previous.rowOffset, null);
+      } else {
+        notDeleteEmptyDataFile = true;
+        eqDeleteWriter.write(key);
+      }
     }
 
     @Override
@@ -223,9 +221,9 @@ public abstract class BaseTaskWriter<T> implements TaskWriter<T> {
     private static final int ROWS_DIVISOR = 1000;
     private final StructLike partitionKey;
 
-    private EncryptedOutputFile currentFile = null;
-    private W currentWriter = null;
-    private long currentRows = 0;
+    protected EncryptedOutputFile currentFile = null;
+    protected W currentWriter = null;
+    protected long currentRows = 0;
 
     private BaseRollingWriter(StructLike partitionKey) {
       this.partitionKey = partitionKey;
@@ -326,6 +324,27 @@ public abstract class BaseTaskWriter<T> implements TaskWriter<T> {
     @Override
     void complete(DataWriter<T> closedWriter) {
       completedDataFiles.add(closedWriter.toDataFile());
+    }
+
+    @Override
+    public void close() throws IOException {
+      if (currentWriter != null) {
+        currentWriter.close();
+
+        if (currentRows == 0L && !BaseTaskWriter.this.notDeleteEmptyDataFile) {
+          try {
+            io.deleteFile(currentFile.encryptingOutputFile());
+          } catch (UncheckedIOException e) {
+            // the file may not have been created, and it isn't worth failing the job to clean up, skip deleting
+          }
+        } else {
+          complete(currentWriter);
+        }
+
+        this.currentFile = null;
+        this.currentWriter = null;
+        this.currentRows = 0;
+      }
     }
   }
 
