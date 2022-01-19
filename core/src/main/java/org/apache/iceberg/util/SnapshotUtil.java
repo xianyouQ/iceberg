@@ -95,11 +95,35 @@ public class SnapshotUtil {
     return lastSnapshot;
   }
 
+  public static List<Snapshot> snapshotsBetween(Table table, long fromSnapshotId, long toSnapshotId) {
+    List<Snapshot> snapshots = Lists.newArrayList(ancestorSnapshots(
+            table.snapshot(toSnapshotId),
+            snapshotId -> snapshotId != fromSnapshotId ? table.snapshot(snapshotId) : null));
+    return snapshots;
+  }
+
+
   public static Iterable<Snapshot> ancestorsOf(long snapshotId, Function<Long, Snapshot> lookup) {
     Snapshot start = lookup.apply(snapshotId);
     Preconditions.checkArgument(start != null, "Cannot find snapshot: %s", snapshotId);
     return ancestorsOf(start, lookup);
   }
+
+
+  public static List<Snapshot> ancestorSnapshots(Snapshot snapshot, Function<Long, Snapshot> lookup) {
+    List<Snapshot> ancestorIds = Lists.newArrayList();
+    Snapshot current = snapshot;
+    while (current != null) {
+      ancestorIds.add(current);
+      if (current.parentId() != null) {
+        current = lookup.apply(current.parentId());
+      } else {
+        current = null;
+      }
+    }
+    return ancestorIds;
+  }
+
 
   /**
    * Traverses the history of the table's current snapshot and finds the first snapshot committed after the given time.
@@ -213,6 +237,20 @@ public class SnapshotUtil {
 
   private static Iterable<Long> toIds(Iterable<Snapshot> snapshots) {
     return Iterables.transform(snapshots, Snapshot::snapshotId);
+  }
+
+  public static List<Snapshot> ancestorSnapshots(Snapshot snapshot, Function<Long, Snapshot> lookup) {
+    List<Snapshot> ancestorIds = Lists.newArrayList();
+    Snapshot current = snapshot;
+    while (current != null) {
+      ancestorIds.add(current);
+      if (current.parentId() != null) {
+        current = lookup.apply(current.parentId());
+      } else {
+        current = null;
+      }
+    }
+    return ancestorIds;
   }
 
   public static List<DataFile> newFiles(Long baseSnapshotId, long latestSnapshotId, Function<Long, Snapshot> lookup) {
