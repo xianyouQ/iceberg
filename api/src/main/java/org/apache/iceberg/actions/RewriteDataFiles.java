@@ -107,6 +107,16 @@ public interface RewriteDataFiles
   boolean USE_STARTING_SEQUENCE_NUMBER_DEFAULT = true;
 
   /**
+   * The snapshot id that this minor rewrite will use this snapshot id to latest snapshot
+   *
+   * <p>Defaults to -1.
+   */
+  String FROM_SNAPSHOT = "from-snapshot";
+
+  int FROM_SNAPSHOT_DEFAULT = -1;
+
+
+  /**
    * Forces the rewrite job order based on the value.
    *
    * <p>

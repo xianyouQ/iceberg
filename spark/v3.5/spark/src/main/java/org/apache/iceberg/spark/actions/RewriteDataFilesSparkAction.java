@@ -83,7 +83,8 @@ public class RewriteDataFilesSparkAction
           TARGET_FILE_SIZE_BYTES,
           USE_STARTING_SEQUENCE_NUMBER,
           REWRITE_JOB_ORDER,
-          OUTPUT_SPEC_ID);
+          OUTPUT_SPEC_ID,
+          FROM_SNAPSHOT);
 
   private static final RewriteDataFilesSparkAction.Result EMPTY_RESULT =
       ImmutableRewriteDataFiles.Result.builder().rewriteResults(ImmutableList.of()).build();
@@ -92,6 +93,7 @@ public class RewriteDataFilesSparkAction
 
   private Expression filter = Expressions.alwaysTrue();
   private int maxConcurrentFileGroupRewrites;
+  private long fromSnapshotId;
   private int maxCommits;
   private int maxFailedCommits;
   private boolean partialProgressEnabled;
@@ -183,13 +185,23 @@ public class RewriteDataFilesSparkAction
   }
 
   StructLikeMap<List<List<FileScanTask>>> planFileGroups(long startingSnapshotId) {
-    CloseableIterable<FileScanTask> fileScanTasks =
-        table
-            .newScan()
-            .useSnapshot(startingSnapshotId)
-            .filter(filter)
-            .ignoreResiduals()
-            .planFiles();
+    CloseableIterable<FileScanTask> fileScanTasks;
+    if (fromSnapshotId != -1 ) {
+      fileScanTasks = table
+              .newIncrementalTableScan()
+              .fromSnapshotInclusive(fromSnapshotId)
+              .toSnapshot(startingSnapshotId)
+              .filter(filter)
+              .ignoreResiduals()
+              .planFiles();
+    } else {
+      fileScanTasks = table
+              .newScan()
+              .useSnapshot(startingSnapshotId)
+              .filter(filter)
+              .ignoreResiduals()
+              .planFiles();
+    }
 
     try {
       StructType partitionType = table.spec().partitionType();
@@ -451,6 +463,8 @@ public class RewriteDataFilesSparkAction
     partialProgressEnabled =
         PropertyUtil.propertyAsBoolean(
             options(), PARTIAL_PROGRESS_ENABLED, PARTIAL_PROGRESS_ENABLED_DEFAULT);
+
+    fromSnapshotId = PropertyUtil.propertyAsLong(options(),FROM_SNAPSHOT, FROM_SNAPSHOT_DEFAULT);
 
     useStartingSequenceNumber =
         PropertyUtil.propertyAsBoolean(

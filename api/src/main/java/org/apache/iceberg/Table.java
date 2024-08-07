@@ -84,6 +84,17 @@ public interface Table {
   }
 
   /**
+   * Create a new {@link IncrementalTableScan} for this table.
+   *
+   * <p>Once a scan is created, it can be refined to project columns and filter data.
+   *
+   * @return an incremental table scan
+   */
+  default IncrementalTableScan newIncrementalTableScan() {
+    throw new UnsupportedOperationException("Incremental table scan is not supported");
+  }
+
+  /**
    * Return the {@link Schema schema} for this table.
    *
    * @return this table's schema
